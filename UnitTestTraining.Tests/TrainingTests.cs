@@ -1,5 +1,6 @@
 using System.Net;
 using FluentAssertions;
+using Moq;
 using RichardSzalay.MockHttp;
 
 namespace UnitTestTraining.Tests;
@@ -10,14 +11,119 @@ public class TrainingTests
     public void GenerateName_None_CorrectName()
     {
         // Arrange
-        var sut = new Training();
+        var systemClock = new Mock<ISystemClock>(MockBehavior.Strict);
+
+        systemClock.Setup(x => x.Now()).Returns(new DateTime(2000, 1, 1));
+        
+        var sut = new Training(systemClock.Object);
         
         // Act
         var result = sut.GenerateName();
 
         // Assert
-        Assert.Equal("name", result);
-        result.Should().Be("name");
+        Assert.Equal("name20000101", result);
+    }
+    
+    [Fact]
+    public void GenerateName_WithYear1999_ThrowException()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>(MockBehavior.Strict);
+
+        systemClock.Setup(x => x.Now()).Returns(new DateTime(1999, 1, 1));
+        
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+
+        // Assert
+        Assert.Throws<Exception>(() => sut.GenerateName());
+    }
+    
+    [Fact]
+    public void GetOrAdd_CallTwoTimesWithId1_SameInstance()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>();
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+        var result1 = sut.GetOrAdd(1);
+        var result2 = sut.GetOrAdd(1);
+
+        // Assert
+        Assert.Equal(result1, result2);
+    }
+    
+    [Fact]
+    public void GetOrAdd_CallTwoTimesWithId1In4MinutesTime_SameInstance()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>(MockBehavior.Strict);
+
+        systemClock.SetupSequence(x => x.Now())
+            .Returns(new DateTime(2000, 1, 1, 1, 1, 1))
+            .Returns(new DateTime(2000, 1, 1, 1, 5, 1));
+        
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+        var result1 = sut.GetOrAdd(1);
+        var result2 = sut.GetOrAdd(1);
+
+        // Assert
+        Assert.Equal(result1, result2);
+    }
+    
+    [Fact]
+    public void GetOrAdd_CallTwoTimesWithId1In6MinutesTime_DifferentInstance()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>(MockBehavior.Strict);
+
+        systemClock.SetupSequence(x => x.Now())
+            .Returns(new DateTime(2000, 1, 1, 1, 1, 1))
+            .Returns(new DateTime(2000, 1, 1, 1, 7, 1));
+        
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+        var result1 = sut.GetOrAdd(1);
+        var result2 = sut.GetOrAdd(1);
+
+        // Assert
+        Assert.NotEqual(result1, result2);
+    }
+    
+    [Fact]
+    public void GetOrAdd_CallTwoTimesWithId1and2_DifferentInstance()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>();
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+        var result1 = sut.GetOrAdd(1);
+        var result2 = sut.GetOrAdd(2);
+
+        // Assert
+        Assert.NotEqual(result1, result2);
+    }
+    
+    [Fact]
+    public void GetOrAdd_CallTwoTimesWithId1aRemove1Add1_DifferentInstance()
+    {
+        // Arrange
+        var systemClock = new Mock<ISystemClock>();
+        var sut = new Training(systemClock.Object);
+        
+        // Act
+        var result1 = sut.GetOrAdd(1);
+        sut.Remove(1);
+        var result2 = sut.GetOrAdd(1);
+
+        // Assert
+        Assert.NotEqual(result1, result2);
     }
     
     [Fact]
@@ -44,7 +150,7 @@ public class TrainingTests
         var content = new StringContent(expectedContent);
         handler.When(url).Respond(HttpStatusCode.OK, content);
 
-        var sut = handler.ToHttpClient();
+        HttpClient sut = handler.ToHttpClient();
         
         // Act
         var response = await sut.GetAsync(url);
